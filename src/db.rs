@@ -771,11 +771,16 @@ impl DB {
             .into_iter()
             .map(|name| ColumnFamilyDescriptor::new(name.as_ref(), Options::default()));
 
-        DB::open_cf_descriptors(opts, path, cfs)
+        DB::open_cf_descriptors(opts, path, cfs, false)
     }
 
     /// Open a database with the given database options and column family descriptors.
-    pub fn open_cf_descriptors<P, I>(opts: &Options, path: P, cfs: I) -> Result<DB, Error>
+    pub fn open_cf_descriptors<P, I>(
+        opts: &Options,
+        path: P,
+        cfs: I,
+        read_only: bool,
+    ) -> Result<DB, Error>
     where
         P: AsRef<Path>,
         I: IntoIterator<Item = ColumnFamilyDescriptor>,
@@ -806,7 +811,15 @@ impl DB {
 
         if cfs.is_empty() {
             unsafe {
-                db = ffi_try!(ffi::rocksdb_open(opts.inner, cpath.as_ptr() as *const _,));
+                db = if read_only {
+                    ffi_try!(ffi::rocksdb_open_for_read_only(
+                        opts.inner,
+                        cpath.as_ptr() as *const _,
+                        0, // error if log file exists (recovery involves writing)
+                    ))
+                } else {
+                    ffi_try!(ffi::rocksdb_open(opts.inner, cpath.as_ptr() as *const _,))
+                }
             }
         } else {
             let mut cfs_v = cfs;
@@ -835,14 +848,26 @@ impl DB {
                 .collect();
 
             unsafe {
-                db = ffi_try!(ffi::rocksdb_open_column_families(
-                    opts.inner,
-                    cpath.as_ptr(),
-                    cfs_v.len() as c_int,
-                    cfnames.as_mut_ptr(),
-                    cfopts.as_mut_ptr(),
-                    cfhandles.as_mut_ptr(),
-                ));
+                db = if read_only {
+                    ffi_try!(ffi::rocksdb_open_for_read_only_column_families(
+                        opts.inner,
+                        cpath.as_ptr(),
+                        cfs_v.len() as c_int,
+                        cfnames.as_mut_ptr(),
+                        cfopts.as_mut_ptr(),
+                        cfhandles.as_mut_ptr(),
+                        0, // error if log file exists (recovery involves writing)
+                    ))
+                } else {
+                    ffi_try!(ffi::rocksdb_open_column_families(
+                        opts.inner,
+                        cpath.as_ptr(),
+                        cfs_v.len() as c_int,
+                        cfnames.as_mut_ptr(),
+                        cfopts.as_mut_ptr(),
+                        cfhandles.as_mut_ptr(),
+                    ))
+                }
             }
 
             for handle in &cfhandles {

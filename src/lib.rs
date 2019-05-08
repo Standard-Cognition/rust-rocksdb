@@ -48,7 +48,7 @@
 //! db_opts.create_missing_column_families(true);
 //! db_opts.create_if_missing(true);
 //! {
-//!     let db = DB::open_cf_descriptors(&db_opts, path, vec![cf]).unwrap();
+//!     let db = DB::open_cf_descriptors(&db_opts, path, vec![cf], false).unwrap();
 //! }
 //! let _ = DB::destroy(&db_opts, path);
 //! ```
